@@ -90,7 +90,20 @@ export class ActivityRetrievalService {
 
     return scoredActivities
       .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => {
+        // Higher relevance score first
+        const scoreDifference = b.score - a.score;
+
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+
+        // If scores are equal, newer activity first
+        return (
+          new Date(b.activity.createdAt).getTime() -
+          new Date(a.activity.createdAt).getTime()
+        );
+      })
       .slice(0, 10);
   }
 

@@ -8,7 +8,8 @@
     "contextvault": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsx --test"
   },
   "keywords": [],
   "author": "",
