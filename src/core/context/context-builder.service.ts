@@ -80,11 +80,14 @@ export class ContextBuilderService {
   ): string {
     const closingTag = `</CONTEXTVAULT_CONTEXT>`;
 
-    let context = `<CONTEXTVAULT_CONTEXT>\n\n`;
-
-    context += `PROJECT\n`;
-    context += `Name: ${projectName}\n`;
-    context += `Path: ${projectPath}\n\n`;
+    let context =
+      `<CONTEXTVAULT_CONTEXT>\n\n` +
+      `PROJECT\n` +
+      `Name: ${projectName}\n` +
+      `Path: ${projectPath}\n\n` +
+      `CURRENT CONTEXT\n\n` +
+      `HISTORICAL CONTEXT\n\n` +
+      `RELEVANT ACTIVITIES\n\n`;
 
     const activeMemories = memories
       .filter((item) => item.memory.status === "ACTIVE")
@@ -99,32 +102,15 @@ export class ContextBuilderService {
       this.MAX_ACTIVITIES
     );
 
-    const sectionCounts: Record<string, number> = {};
-
-    const appendEntry = (
-      section: string,
-      entry: string
-    ): boolean => {
-      const sectionHeader =
-        (sectionCounts[section] ?? 0) === 0
-          ? `${section}\n\n`
-          : "";
-
-      const addition = sectionHeader + entry;
-
+    const appendEntry = (entry: string): boolean => {
       if (
-        context.length +
-          addition.length +
-          closingTag.length >
+        context.length + entry.length + closingTag.length >
         this.MAX_CONTEXT_CHARS
       ) {
         return false;
       }
 
-      context += addition;
-      sectionCounts[section] =
-        (sectionCounts[section] ?? 0) + 1;
-
+      context += entry;
       return true;
     };
 
@@ -137,7 +123,7 @@ export class ContextBuilderService {
         `Tags: ${memory.tags.join(", ")}\n` +
         `Content:\n${memory.content}\n\n`;
 
-      if (!appendEntry("CURRENT CONTEXT", entry)) {
+      if (!appendEntry(entry)) {
         break;
       }
     }
@@ -152,7 +138,7 @@ export class ContextBuilderService {
         `Tags: ${memory.tags.join(", ")}\n` +
         `Content:\n${memory.content}\n\n`;
 
-      if (!appendEntry("HISTORICAL CONTEXT", entry)) {
+      if (!appendEntry(entry)) {
         break;
       }
     }
@@ -179,7 +165,7 @@ export class ContextBuilderService {
           matchReasonsText +
           `\n`;
 
-        if (!appendEntry("RELEVANT ACTIVITIES", entry)) {
+        if (!appendEntry(entry)) {
           break;
         }
       }
