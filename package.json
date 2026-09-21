@@ -1,0 +1,21 @@
+{
+  "name": "contextvault",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "dist/index.js",
+  "bin": {
+    "contextvault": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.6.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
