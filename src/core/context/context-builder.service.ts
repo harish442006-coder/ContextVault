@@ -106,7 +106,7 @@ export class ContextBuilderService {
       entry: string
     ): boolean => {
       const sectionHeader =
-        sectionCounts[section] === 0
+        (sectionCounts[section] ?? 0) === 0
           ? `${section}\n\n`
           : "";
 
