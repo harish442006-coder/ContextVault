@@ -510,3 +510,67 @@ test("CLI prevents updating memory from another project", () => {
     }
   });
 });
+
+test("CLI prevents archiving memory from another project", () => {
+  withTempProject(({ runCLI, openDB, tempDir }) => {
+    // Project A: initialize and create a memory
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Project A init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Protected Memory",
+      "This memory must remain active",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected Project A memory");
+
+      // Project B: separate directory, same database
+      const projectBPath = path.join(tempDir, "project-b");
+      fs.mkdirSync(projectBPath);
+
+      const projectBInit = runCLI(["init"], projectBPath);
+      assertCLISuccess(projectBInit, "Project B init");
+
+      // Attempt to archive Project A's memory from Project B
+      const archiveResult = runCLI(
+        ["memory", "archive", memory.id],
+        projectBPath
+      );
+
+      assert.equal(archiveResult.status, 1);
+
+      assert.match(
+        archiveResult.stdout,
+        /Memory does not belong to this project\./
+      );
+
+      // Verify the memory remains ACTIVE
+      const savedMemory = db
+        .prepare(`
+          SELECT status
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as { status: string } | undefined;
+
+      assert.ok(savedMemory, "Expected original memory");
+
+      assert.equal(savedMemory.status, "ACTIVE");
+    } finally {
+      db.close();
+    }
+  });
+});
