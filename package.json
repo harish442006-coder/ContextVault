@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx --test"
+    "test":"tsx --test src/core/retrieval/activity-retrieval.service.test.ts src/core/context/context-builder.service.test.ts src/core/context/context-vault.service.test.ts"
   },
   "keywords": [],
   "author": "",
