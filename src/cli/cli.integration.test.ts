@@ -574,3 +574,83 @@ test("CLI prevents archiving memory from another project", () => {
     }
   });
 });
+
+test("CLI memory list displays memories for the current project", () => {
+  withTempProject(({ runCLI }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "DECISION",
+      "Database Decision",
+      "ContextVault uses SQLite",
+      "database,architecture",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const secondAddResult = runCLI([
+      "memory",
+      "add",
+      "WORKING",
+      "Current Task",
+      "Implementing CLI integration tests",
+      "testing,cli",
+    ]);
+
+    assertCLISuccess(secondAddResult, "Second memory add");
+
+    const listResult = runCLI(["memory", "list"]);
+
+    assertCLISuccess(listResult, "Memory list");
+
+    // Verify project heading
+    assert.match(listResult.stdout, /Memories for:/);
+
+    // Verify first memory details
+    assert.match(
+      listResult.stdout,
+      /\[DECISION\] Database Decision/
+    );
+    assert.match(
+      listResult.stdout,
+      /ContextVault uses SQLite/
+    );
+    assert.match(
+      listResult.stdout,
+      /Tags: database, architecture/
+    );
+
+    // Verify second memory details
+    assert.match(
+      listResult.stdout,
+      /\[WORKING\] Current Task/
+    );
+    assert.match(
+      listResult.stdout,
+      /Implementing CLI integration tests/
+    );
+    assert.match(
+      listResult.stdout,
+      /Tags: testing, cli/
+    );
+  });
+});
+
+test("CLI memory list handles a project with no memories", () => {
+  withTempProject(({ runCLI }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const listResult = runCLI(["memory", "list"]);
+
+    assertCLISuccess(listResult, "Memory list");
+
+    assert.match(
+      listResult.stdout,
+      /No memories found\./
+    );
+  });
+});
