@@ -668,3 +668,384 @@ test("CLI memory list rejects when no project is initialized", () => {
     );
   });
 });
+
+test("CLI memory update rejects an invalid type without modifying memory", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Type Validation Test",
+      "Original memory content",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected a memory to exist");
+
+      const updateResult = runCLI([
+        "memory",
+        "update",
+        memory.id,
+        "--type",
+        "INVALID",
+      ]);
+
+      assert.equal(updateResult.status, 1);
+
+      assert.match(
+        updateResult.stdout,
+        /Invalid memory type/
+      );
+
+      // Verify the original type remains unchanged
+      const savedMemory = db
+        .prepare(`
+          SELECT type
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as { type: string } | undefined;
+
+      assert.ok(savedMemory, "Expected original memory");
+
+      assert.equal(savedMemory.type, "PROJECT");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory update rejects a missing title value", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Original Title",
+      "Original content",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected a memory to exist");
+
+      const updateResult = runCLI([
+        "memory",
+        "update",
+        memory.id,
+        "--title",
+      ]);
+
+      assert.equal(updateResult.status, 1);
+
+      assert.match(
+        updateResult.stdout,
+        /Please provide at least one field to update\./
+      );
+
+      const savedMemory = db
+        .prepare(`
+          SELECT title, content
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as {
+          title: string;
+          content: string;
+        } | undefined;
+
+      assert.ok(savedMemory, "Expected original memory");
+
+      assert.equal(savedMemory.title, "Original Title");
+      assert.equal(savedMemory.content, "Original content");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory update rejects an unknown option without modifying memory", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Original Title",
+      "Original content",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected a memory to exist");
+
+      const updateResult = runCLI([
+        "memory",
+        "update",
+        memory.id,
+        "--name",
+        "Unexpected Value",
+      ]);
+
+      assert.equal(updateResult.status, 1);
+
+      assert.match(
+        updateResult.stdout,
+        /Unknown option: --name/
+      );
+
+      const savedMemory = db
+        .prepare(`
+          SELECT title, content, type
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as {
+          title: string;
+          content: string;
+          type: string;
+        } | undefined;
+
+      assert.ok(savedMemory, "Expected original memory");
+
+      assert.equal(savedMemory.title, "Original Title");
+      assert.equal(savedMemory.content, "Original content");
+      assert.equal(savedMemory.type, "PROJECT");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory archive rejects an invalid memory ID", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const archiveResult = runCLI([
+      "memory",
+      "archive",
+      "invalid-memory-id",
+    ]);
+
+    assert.equal(archiveResult.status, 1);
+
+    assert.match(
+      archiveResult.stdout,
+      /Memory not found\./
+    );
+
+    const db = openDB();
+
+    try {
+      const memories = db
+        .prepare("SELECT id FROM memories")
+        .all();
+
+      assert.equal(memories.length, 0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory archive rejects a missing memory ID", () => {
+  withTempProject(({ runCLI }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const archiveResult = runCLI(["memory", "archive"]);
+
+    assert.equal(archiveResult.status, 1);
+    assert.match(archiveResult.stdout, /Usage:/);
+  });
+});
+
+test("CLI memory archive rejects when no project is initialized", () => {
+  withTempProject(({ runCLI }) => {
+    const archiveResult = runCLI([
+      "memory",
+      "archive",
+      "some-memory-id",
+    ]);
+
+    assert.equal(archiveResult.status, 1);
+    assert.match(archiveResult.stdout, /No project found/);
+  });
+});
+
+test("CLI query excludes archived memories", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "HISTORY",
+      "ArchivedQueryUnique",
+      "This memory contains archivedquerytoken for retrieval testing.",
+      "testing",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    let memoryId: string;
+
+    try {
+      const memory = db
+        .prepare(
+          "SELECT id FROM memories WHERE title = ?"
+        )
+        .get("ArchivedQueryUnique") as
+        | { id: string }
+        | undefined;
+
+      assert.ok(memory, "Memory should exist in database");
+      memoryId = memory.id;
+    } finally {
+      db.close();
+    }
+
+    const archiveResult = runCLI([
+      "memory",
+      "archive",
+      memoryId,
+    ]);
+
+    assertCLISuccess(archiveResult, "Memory archive");
+
+    const queryResult = runCLI([
+      "query",
+      "archivedquerytoken",
+    ]);
+
+    assert.equal(queryResult.status, 0);
+    assert.doesNotMatch(
+      queryResult.stdout,
+      /ArchivedQueryUnique/
+    );
+  });
+});
+
+test("CLI query excludes unrelated memories", () => {
+  withTempProject(({ runCLI }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const matchingMemory = runCLI([
+      "memory",
+      "add",
+      "HISTORY",
+      "UniqueRedisSetup",
+      "Redis caching configuration for backend performance.",
+      "redis",
+    ]);
+
+    assertCLISuccess(matchingMemory, "Matching memory add");
+
+    const unrelatedMemory = runCLI([
+      "memory",
+      "add",
+      "HISTORY",
+      "UniqueGardenNotes",
+      "Gardening tips for growing roses and tulips.",
+      "garden",
+    ]);
+
+    assertCLISuccess(unrelatedMemory, "Unrelated memory add");
+
+    const queryResult = runCLI([
+      "query",
+      "redis",
+    ]);
+
+    assert.equal(queryResult.status, 0);
+    assert.match(queryResult.stdout, /UniqueRedisSetup/);
+    assert.doesNotMatch(queryResult.stdout, /UniqueGardenNotes/);
+  });
+});
+
+test("CLI query ranks title matches above content matches", () => {
+  withTempProject(({ runCLI }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const contentMatch = runCLI([
+      "memory",
+      "add",
+      "HISTORY",
+      "BackendNotes",
+      "Notes about caching strategies for backend systems.",
+      "backend",
+    ]);
+    
+    assertCLISuccess(contentMatch, "Content match add");
+
+    const titleMatch = runCLI([
+      "memory",
+      "add",
+      "HISTORY",
+      "Caching Architecture",
+      "Architecture notes for a backend service.",
+      "architecture",
+    ]);
+
+    assertCLISuccess(titleMatch, "Title match add");
+
+    const queryResult = runCLI(["query", "caching"]);
+
+    assert.equal(queryResult.status, 0);
+
+    const titleIndex = queryResult.stdout.indexOf(
+      "Caching Architecture"
+    );
+
+    const contentIndex = queryResult.stdout.indexOf(
+      "BackendNotes"
+    );
+
+    assert.ok(titleIndex !== -1, "Title match should appear");
+    assert.ok(contentIndex !== -1, "Content match should appear");
+
+    assert.ok(
+      titleIndex < contentIndex,
+      "Title match should appear before content match"
+    );
+  });
+});
