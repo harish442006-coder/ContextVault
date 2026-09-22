@@ -6,10 +6,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.resolve(
-  __dirname,
-  "../../data/contextvault.db"
-);
+const dbPath = process.env.CONTEXTVAULT_DB_PATH
+  ? path.resolve(process.env.CONTEXTVAULT_DB_PATH)
+  : path.resolve(__dirname, "../../data/contextvault.db");
 
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
