@@ -23,7 +23,10 @@ function withTempProject(
   callback: (context: {
     tempDir: string;
     dbPath: string;
-    runCLI: (args: string[]) => SpawnSyncReturns<string>;
+    runCLI: (
+        args: string[],
+        cwd?: string
+        ) => SpawnSyncReturns<string>;
     openDB: () => DatabaseSync;
   }) => void
 ) {
@@ -33,12 +36,12 @@ function withTempProject(
 
   const dbPath = path.join(tempDir, "test.db");
 
-  const runCLI = (args: string[]) =>
+  const runCLI = (args: string[],cwd=tempDir) =>
     spawnSync(
       process.execPath,
       [tsxPath, cliPath, ...args],
       {
-        cwd: tempDir,
+        cwd,
         encoding: "utf-8",
         env: {
           ...process.env,
@@ -282,5 +285,228 @@ test("CLI rejects query without a search term", () => {
       output.trim().length > 0,
       "CLI should display an error message"
     );
+  });
+});
+
+//TEST 8 : memory update test
+test("CLI memory update modifies an existing memory", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Original Title",
+      "Original content",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected a memory to exist");
+
+      const updateResult = runCLI([
+        "memory",
+        "update",
+        memory.id,
+        "--title",
+        "Updated Title",
+        "--content",
+        "Updated content",
+      ]);
+
+      assertCLISuccess(updateResult, "Memory update");
+
+      assert.match(
+        updateResult.stdout,
+        /Memory updated: Updated Title/
+      );
+
+      const updatedMemory = db
+        .prepare(`
+          SELECT title, content
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as {
+          title: string;
+          content: string;
+        } | undefined;
+
+      assert.ok(updatedMemory, "Expected updated memory");
+
+      assert.equal(updatedMemory.title, "Updated Title");
+      assert.equal(updatedMemory.content, "Updated content");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory archive changes memory status to ARCHIVED", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Memory to Archive",
+      "This memory will be archived",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected a memory to exist");
+
+      const archiveResult = runCLI([
+        "memory",
+        "archive",
+        memory.id,
+      ]);
+
+      assertCLISuccess(archiveResult, "Memory archive");
+
+      assert.match(
+        archiveResult.stdout,
+        /Memory archived: Memory to Archive/
+      );
+
+      const archivedMemory = db
+        .prepare(`
+          SELECT status
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as { status: string } | undefined;
+
+      assert.ok(archivedMemory, "Expected archived memory");
+
+      assert.equal(archivedMemory.status, "ARCHIVED");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI memory update rejects an invalid memory ID", () => {
+  withTempProject(({ runCLI, openDB }) => {
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    const result = runCLI([
+      "memory",
+      "update",
+      "invalid-memory-id",
+      "--title",
+      "Should Not Update",
+    ]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /Memory not found\./);
+
+    const db = openDB();
+
+    try {
+      const memories = db
+        .prepare("SELECT id FROM memories")
+        .all();
+
+      assert.equal(memories.length, 0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("CLI prevents updating memory from another project", () => {
+  withTempProject(({ runCLI, openDB, tempDir }) => {
+    // Project A
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Project A init");
+
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "Project A Memory",
+      "Original content",
+      "test,cli",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    const db = openDB();
+
+    try {
+      const memory = db
+        .prepare("SELECT id FROM memories")
+        .get() as { id: string } | undefined;
+
+      assert.ok(memory, "Expected Project A memory");
+
+      // Project B: separate directory, same database
+      const projectBPath = path.join(tempDir, "project-b");
+      fs.mkdirSync(projectBPath);
+
+      const projectBInit = runCLI(["init"], projectBPath);
+      assertCLISuccess(projectBInit, "Project B init");
+
+      // Attempt to update Project A memory from Project B
+      const updateResult = runCLI(
+        [
+          "memory",
+          "update",
+          memory.id,
+          "--title",
+          "Unauthorized Update",
+        ],
+        projectBPath
+      );
+
+      assert.equal(updateResult.status, 1);
+
+      assert.match(
+        updateResult.stdout,
+        /Memory does not belong to this project\./
+      );
+
+      // Verify original memory remains unchanged
+      const savedMemory = db
+        .prepare(`
+          SELECT title, content
+          FROM memories
+          WHERE id = ?
+        `)
+        .get(memory.id) as {
+          title: string;
+          content: string;
+        } | undefined;
+
+      assert.ok(savedMemory, "Expected original memory");
+
+      assert.equal(savedMemory.title, "Project A Memory");
+      assert.equal(savedMemory.content, "Original content");
+    } finally {
+      db.close();
+    }
   });
 });
