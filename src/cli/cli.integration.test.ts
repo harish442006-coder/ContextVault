@@ -654,3 +654,17 @@ test("CLI memory list handles a project with no memories", () => {
     );
   });
 });
+
+test("CLI memory list rejects when no project is initialized", () => {
+  withTempProject(({ runCLI }) => {
+    // Intentionally skip init
+    const result = runCLI(["memory", "list"]);
+
+    assert.equal(result.status, 1);
+
+    assert.match(
+      result.stdout,
+      /No project found\. Run: contextvault init/
+    );
+  });
+});
