@@ -1,79 +1,37 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import {
+  spawnSync,
+  type SpawnSyncReturns,
+} from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("CLI init creates a project in an isolated database", () => {
-    const projectRoot = process.cwd();
-    const tempDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), "contextvault-test-")
-    );
+const projectRoot = process.cwd();
 
-    const dbPath = path.join(tempDir, "test.db");
-    const cliPath = path.join(projectRoot, "src/index.ts");
+const cliPath = path.join(projectRoot, "src/index.ts");
 
-    try {
-        const result = spawnSync(
-        process.execPath,
-        [
-        path.resolve("node_modules/tsx/dist/cli.mjs"),
-        cliPath,
-        "init",
-        ],
-        {
-            cwd: tempDir,
-            encoding: "utf-8",
-            env: {
-            ...process.env,
-            CONTEXTVAULT_DB_PATH: dbPath,
-            },
-        }
-        );
+const tsxPath = path.join(
+  projectRoot,
+  "node_modules/tsx/dist/cli.mjs"
+);
 
-        assert.equal(
-        result.status,
-        0,
-        `CLI failed:\n${result.stderr}\n${result.stdout}`
-        );
-
-        assert.ok(fs.existsSync(dbPath), "Database should exist");
-
-        const db = new DatabaseSync(dbPath);
-
-        try {
-        const projects = db
-            .prepare("SELECT * FROM projects")
-            .all();
-
-        assert.equal(projects.length, 1);
-        } finally {
-        db.close();
-        }
-    } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-    });
-
-test("CLI memory add saves a memory to the isolated database", () => {
+// Reusable isolated test environment
+function withTempProject(
+  callback: (context: {
+    tempDir: string;
+    dbPath: string;
+    runCLI: (args: string[]) => SpawnSyncReturns<string>;
+    openDB: () => DatabaseSync;
+  }) => void
+) {
   const tempDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "contextvault-test-")
   );
 
-  const projectRoot = process.cwd();
   const dbPath = path.join(tempDir, "test.db");
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  const env = {
-    ...process.env,
-    CONTEXTVAULT_DB_PATH: dbPath,
-  };
 
   const runCLI = (args: string[]) =>
     spawnSync(
@@ -82,21 +40,71 @@ test("CLI memory add saves a memory to the isolated database", () => {
       {
         cwd: tempDir,
         encoding: "utf-8",
-        env,
+        env: {
+          ...process.env,
+          CONTEXTVAULT_DB_PATH: dbPath,
+        },
       }
     );
 
+  const openDB = () => new DatabaseSync(dbPath);
+
   try {
-    // First, initialize the project
+    callback({
+      tempDir,
+      dbPath,
+      runCLI,
+      openDB,
+    });
+  } finally {
+    fs.rmSync(tempDir, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+// Helper to assert CLI success
+function assertCLISuccess(
+  result: SpawnSyncReturns<string>,
+  command: string
+) {
+  assert.equal(
+    result.status,
+    0,
+    `${command} failed:\n${result.stderr}\n${result.stdout}`
+  );
+}
+
+// Test 1: Init
+test("CLI init creates a project in an isolated database", () => {
+  withTempProject(({ dbPath, runCLI, openDB }) => {
+    const result = runCLI(["init"]);
+
+    assertCLISuccess(result, "Init");
+
+    assert.ok(fs.existsSync(dbPath), "Database should exist");
+
+    const db = openDB();
+
+    try {
+      const projects = db
+        .prepare("SELECT * FROM projects")
+        .all();
+
+      assert.equal(projects.length, 1);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// Test 2: Memory add
+test("CLI memory add saves a memory to the isolated database", () => {
+  withTempProject(({ runCLI, openDB }) => {
     const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
 
-    assert.equal(
-      initResult.status,
-      0,
-      `Init failed:\n${initResult.stderr}\n${initResult.stdout}`
-    );
-
-    // Then add a memory
     const addResult = runCLI([
       "memory",
       "add",
@@ -106,14 +114,9 @@ test("CLI memory add saves a memory to the isolated database", () => {
       "test,cli",
     ]);
 
-    assert.equal(
-      addResult.status,
-      0,
-      `Memory add failed:\n${addResult.stderr}\n${addResult.stdout}`
-    );
+    assertCLISuccess(addResult, "Memory add");
 
-    // Verify directly in SQLite
-    const db = new DatabaseSync(dbPath);
+    const db = openDB();
 
     try {
       const memories = db
@@ -130,64 +133,27 @@ test("CLI memory add saves a memory to the isolated database", () => {
 
       assert.equal(memories.length, 1);
 
-        const memory = memories[0];
+      const memory = memories[0];
+      assert.ok(memory, "Expected a memory to exist");
 
-        assert.ok(memory, "Expected a memory to exist");
-
-        assert.equal(memory.title, "Integration Test Memory");
-        assert.equal(
+      assert.equal(memory.title, "Integration Test Memory");
+      assert.equal(
         memory.content,
         "This memory was created through the CLI"
-        );
-        assert.equal(memory.type, "PROJECT");
+      );
+      assert.equal(memory.type, "PROJECT");
     } finally {
       db.close();
     }
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
 
+// Test 3: Query retrieves saved memory
 test("CLI query retrieves a previously saved memory", () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "contextvault-test-")
-  );
-
-  const projectRoot = process.cwd();
-  const dbPath = path.join(tempDir, "test.db");
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  const env = {
-    ...process.env,
-    CONTEXTVAULT_DB_PATH: dbPath,
-  };
-
-  const runCLI = (args: string[]) =>
-    spawnSync(
-      process.execPath,
-      [tsxPath, cliPath, ...args],
-      {
-        cwd: tempDir,
-        encoding: "utf-8",
-        env,
-      }
-    );
-
-  try {
-    // 1. Initialize project
+  withTempProject(({ runCLI }) => {
     const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
 
-    assert.equal(
-      initResult.status,
-      0,
-      `Init failed:\n${initResult.stderr}\n${initResult.stdout}`
-    );
-
-    // 2. Add a memory
     const addResult = runCLI([
       "memory",
       "add",
@@ -197,25 +163,15 @@ test("CLI query retrieves a previously saved memory", () => {
       "query,integration",
     ]);
 
-    assert.equal(
-      addResult.status,
-      0,
-      `Memory add failed:\n${addResult.stderr}\n${addResult.stdout}`
-    );
+    assertCLISuccess(addResult, "Memory add");
 
-    // 3. Query the saved memory
     const queryResult = runCLI([
       "query",
       "ContextVault project memories",
     ]);
 
-    assert.equal(
-      queryResult.status,
-      0,
-      `Query failed:\n${queryResult.stderr}\n${queryResult.stdout}`
-    );
+    assertCLISuccess(queryResult, "Query");
 
-    // 4. Verify the CLI output
     assert.ok(
       queryResult.stdout.includes("Query Integration Memory"),
       `Expected memory title in output:\n${queryResult.stdout}`
@@ -227,94 +183,35 @@ test("CLI query retrieves a previously saved memory", () => {
       ),
       `Expected memory content in output:\n${queryResult.stdout}`
     );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
 
+// Test 4: Invalid command
 test("CLI rejects an invalid command", () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "contextvault-test-")
-  );
+  withTempProject(({ runCLI }) => {
+    const result = runCLI(["invalid-command"]);
 
-  const projectRoot = process.cwd();
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  try {
-    const result = spawnSync(
-      process.execPath,
-      [tsxPath, cliPath, "invalid-command"],
-      {
-        cwd: tempDir,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          CONTEXTVAULT_DB_PATH: path.join(tempDir, "test.db"),
-        },
-      }
-    );
-
-    // Invalid command should return a non-zero exit code
     assert.notEqual(
       result.status,
       0,
       "Invalid command should fail"
     );
 
-    // CLI should provide some error/help output
     const output = result.stdout + result.stderr;
 
     assert.ok(
       output.trim().length > 0,
       "CLI should display an error or help message"
     );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
 
+// Test 5: Invalid memory type
 test("CLI rejects an invalid memory type without inserting a memory", () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "contextvault-test-")
-  );
-
-  const projectRoot = process.cwd();
-  const dbPath = path.join(tempDir, "test.db");
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  const runCLI = (args: string[]) =>
-    spawnSync(
-      process.execPath,
-      [tsxPath, cliPath, ...args],
-      {
-        cwd: tempDir,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          CONTEXTVAULT_DB_PATH: dbPath,
-        },
-      }
-    );
-
-  try {
-    // 1. Initialize project
+  withTempProject(({ runCLI, openDB }) => {
     const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
 
-    assert.equal(
-      initResult.status,
-      0,
-      `Init failed:\n${initResult.stderr}\n${initResult.stdout}`
-    );
-
-    // 2. Attempt to add memory with an invalid type
     const addResult = runCLI([
       "memory",
       "add",
@@ -324,15 +221,13 @@ test("CLI rejects an invalid memory type without inserting a memory", () => {
       "test",
     ]);
 
-    // 3. CLI should reject the invalid type
     assert.notEqual(
       addResult.status,
       0,
       "Invalid memory type should fail"
     );
 
-    // 4. Verify no memory was inserted
-    const db = new DatabaseSync(dbPath);
+    const db = openDB();
 
     try {
       const result = db
@@ -347,39 +242,14 @@ test("CLI rejects an invalid memory type without inserting a memory", () => {
     } finally {
       db.close();
     }
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
 
+// Test 6: Query without initialized project
 test("CLI query handles a missing project gracefully", () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "contextvault-test-")
-  );
+  withTempProject(({ runCLI }) => {
+    const result = runCLI(["query", "test query"]);
 
-  const projectRoot = process.cwd();
-  const dbPath = path.join(tempDir, "test.db");
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  try {
-    const result = spawnSync(
-      process.execPath,
-      [tsxPath, cliPath, "query", "test query"],
-      {
-        cwd: tempDir,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          CONTEXTVAULT_DB_PATH: dbPath,
-        },
-      }
-    );
-
-    // Query should fail because no project is initialized
     assert.notEqual(
       result.status,
       0,
@@ -392,37 +262,13 @@ test("CLI query handles a missing project gracefully", () => {
       output.includes("No project found"),
       `Expected missing-project message:\n${output}`
     );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
 
+// Test 7: Query without search term
 test("CLI rejects query without a search term", () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "contextvault-test-")
-  );
-
-  const projectRoot = process.cwd();
-  const dbPath = path.join(tempDir, "test.db");
-  const cliPath = path.join(projectRoot, "src/index.ts");
-  const tsxPath = path.join(
-    projectRoot,
-    "node_modules/tsx/dist/cli.mjs"
-  );
-
-  try {
-    const result = spawnSync(
-      process.execPath,
-      [tsxPath, cliPath, "query"],
-      {
-        cwd: tempDir,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          CONTEXTVAULT_DB_PATH: dbPath,
-        },
-      }
-    );
+  withTempProject(({ runCLI }) => {
+    const result = runCLI(["query"]);
 
     assert.notEqual(
       result.status,
@@ -436,7 +282,5 @@ test("CLI rejects query without a search term", () => {
       output.trim().length > 0,
       "CLI should display an error message"
     );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 });
