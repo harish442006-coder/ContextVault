@@ -276,3 +276,78 @@ test("CLI rejects an invalid command", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("CLI rejects an invalid memory type without inserting a memory", () => {
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "contextvault-test-")
+  );
+
+  const projectRoot = process.cwd();
+  const dbPath = path.join(tempDir, "test.db");
+  const cliPath = path.join(projectRoot, "src/index.ts");
+  const tsxPath = path.join(
+    projectRoot,
+    "node_modules/tsx/dist/cli.mjs"
+  );
+
+  const runCLI = (args: string[]) =>
+    spawnSync(
+      process.execPath,
+      [tsxPath, cliPath, ...args],
+      {
+        cwd: tempDir,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          CONTEXTVAULT_DB_PATH: dbPath,
+        },
+      }
+    );
+
+  try {
+    // 1. Initialize project
+    const initResult = runCLI(["init"]);
+
+    assert.equal(
+      initResult.status,
+      0,
+      `Init failed:\n${initResult.stderr}\n${initResult.stdout}`
+    );
+
+    // 2. Attempt to add memory with an invalid type
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "UNKNOWN",
+      "Invalid Type Test",
+      "This memory should not be saved",
+      "test",
+    ]);
+
+    // 3. CLI should reject the invalid type
+    assert.notEqual(
+      addResult.status,
+      0,
+      "Invalid memory type should fail"
+    );
+
+    // 4. Verify no memory was inserted
+    const db = new DatabaseSync(dbPath);
+
+    try {
+      const result = db
+        .prepare("SELECT COUNT(*) AS count FROM memories")
+        .get() as { count: number };
+
+      assert.equal(
+        result.count,
+        0,
+        "No memory should be inserted for an invalid type"
+      );
+    } finally {
+      db.close();
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
