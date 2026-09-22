@@ -396,3 +396,47 @@ test("CLI query handles a missing project gracefully", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("CLI rejects query without a search term", () => {
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "contextvault-test-")
+  );
+
+  const projectRoot = process.cwd();
+  const dbPath = path.join(tempDir, "test.db");
+  const cliPath = path.join(projectRoot, "src/index.ts");
+  const tsxPath = path.join(
+    projectRoot,
+    "node_modules/tsx/dist/cli.mjs"
+  );
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [tsxPath, cliPath, "query"],
+      {
+        cwd: tempDir,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          CONTEXTVAULT_DB_PATH: dbPath,
+        },
+      }
+    );
+
+    assert.notEqual(
+      result.status,
+      0,
+      "Query without a search term should fail"
+    );
+
+    const output = result.stdout + result.stderr;
+
+    assert.ok(
+      output.trim().length > 0,
+      "CLI should display an error message"
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
