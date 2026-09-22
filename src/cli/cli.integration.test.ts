@@ -231,3 +231,48 @@ test("CLI query retrieves a previously saved memory", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("CLI rejects an invalid command", () => {
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "contextvault-test-")
+  );
+
+  const projectRoot = process.cwd();
+  const cliPath = path.join(projectRoot, "src/index.ts");
+  const tsxPath = path.join(
+    projectRoot,
+    "node_modules/tsx/dist/cli.mjs"
+  );
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [tsxPath, cliPath, "invalid-command"],
+      {
+        cwd: tempDir,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          CONTEXTVAULT_DB_PATH: path.join(tempDir, "test.db"),
+        },
+      }
+    );
+
+    // Invalid command should return a non-zero exit code
+    assert.notEqual(
+      result.status,
+      0,
+      "Invalid command should fail"
+    );
+
+    // CLI should provide some error/help output
+    const output = result.stdout + result.stderr;
+
+    assert.ok(
+      output.trim().length > 0,
+      "CLI should display an error or help message"
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
