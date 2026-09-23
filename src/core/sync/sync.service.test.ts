@@ -214,3 +214,79 @@ test("Git sync creates activities for new commits", () => {
   assert.equal(result, "Synced 1 new Git activities.");
   assert.equal(createActivityCalls, 1);
 });
+
+test("Git sync skips an existing commit activity", () => {
+  let createActivityCalls = 0;
+
+  const gitService = {
+    isGitRepository: () => true,
+    getRecentCommits: () => [
+      {
+        hash: "commit-123",
+        message: "Add feature",
+        files: ["feature.ts"],
+      },
+    ],
+  };
+
+  const activityService = {
+    getActivityByExternalId: () => ({
+      id: "existing-activity",
+    }),
+    createActivity: () => {
+      createActivityCalls++;
+    },
+  };
+
+  const syncService = new SyncService(
+    gitService as unknown as GitService,
+    {} as ProjectScannerService,
+    {} as FileSnapshotRepository,
+    activityService as unknown as ActivityService
+  );
+
+  const result = syncService.syncProject(
+    "project-1",
+    "/test/project"
+  );
+
+  assert.equal(result, "Synced 0 new Git activities.");
+  assert.equal(createActivityCalls, 0);
+});
+
+test("Git sync skips commits without a hash", () => {
+  let createActivityCalls = 0;
+
+  const gitService = {
+    isGitRepository: () => true,
+    getRecentCommits: () => [
+      {
+        hash: "",
+        message: "Commit without hash",
+        files: [],
+      },
+    ],
+  };
+
+  const activityService = {
+    getActivityByExternalId: () => null,
+    createActivity: () => {
+      createActivityCalls++;
+    },
+  };
+
+  const syncService = new SyncService(
+    gitService as unknown as GitService,
+    {} as ProjectScannerService,
+    {} as FileSnapshotRepository,
+    activityService as unknown as ActivityService
+  );
+
+  const result = syncService.syncProject(
+    "project-1",
+    "/test/project"
+  );
+
+  assert.equal(result, "Synced 0 new Git activities.");
+  assert.equal(createActivityCalls, 0);
+});
