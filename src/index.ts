@@ -20,6 +20,8 @@ import { ActivityService } from "./core/activity/activity.service.js";
 import { GitService } from "./core/git/git.service.js";
 import { ActivityRetrievalService } from "./core/retrieval/activity-retrieval.service.js";
 
+import { SyncService } from "./core/sync/sync.service.js";
+
 import { seedDemoData } from "./seed.js";
 
 function showHelp() {
@@ -101,7 +103,12 @@ const projectScanner = new ProjectScannerService(
 const fileSnapshotRepository =
   new FileSnapshotRepository(db);
 
-
+const syncService = new SyncService(
+  gitService,
+  projectScanner,
+  fileSnapshotRepository,
+  activityService
+);
 
 const command = process.argv[2];
 const query = process.argv[3];
@@ -439,151 +446,25 @@ if (command === "sync") {
     process.exit(1);
   }
 
-  if (!gitService.isGitRepository(projectPath)) {
-    let currentSnapshots;
-
-    try {
-      currentSnapshots =
-        projectScanner.scanProject(projectPath);
-    } catch (error) {
-      console.error(
-        "Filesystem scan failed. Sync aborted."
-      );
-
-      console.error(
-        error instanceof Error
-          ? error.message
-          : error
-      );
-
-      process.exit(1);
-    }
-
-    const previousSnapshots =
-      fileSnapshotRepository.getSnapshotsByProjectId(
-        project.id
-      );
-
-    // First scan: establish baseline
-    if (previousSnapshots.length === 0) {
-      fileSnapshotRepository.saveSnapshots(
-        project.id,
-        currentSnapshots
-      );
-
-      console.log(
-        `Initial scan complete. ${currentSnapshots.length} files indexed.`
-      );
-
-      process.exit(0);
-    }
-
-    // Compare previous and current snapshots
-    const changes = projectScanner.compareSnapshots(
-      previousSnapshots,
-      currentSnapshots
-    );
-
-    let syncedCount = 0;
-
-    for (const change of changes) {
-      const snapshot = change.current ?? change.previous;
-
-      if (!snapshot) {
-        continue;
-      }
-
-      const externalId = [
-        "FILE_CHANGE",
-        change.type,
-        change.path,
-        snapshot.modifiedAt,
-        snapshot.size,
-      ].join(":");
-
-      const existingActivity =
-        activityService.getActivityByExternalId(
-          project.id,
-          "FILESYSTEM",
-          externalId
-        );
-
-      if (existingActivity) {
-        continue;
-      }
-
-      activityService.createActivity(
-        project.id,
-        "FILE_CHANGE",
-        "FILESYSTEM",
-        `${change.type}: ${change.path}`,
-        {
-          changeType: change.type,
-          path: change.path,
-          previous: change.previous,
-          current: change.current,
-        },
-        externalId
-      );
-
-      syncedCount++;
-    }
-
-    // Save current state for the next sync
-    fileSnapshotRepository.saveSnapshots(
+  try {
+    const result = syncService.syncProject(
       project.id,
-      currentSnapshots
+      projectPath
     );
 
-    console.log(
-      `Filesystem sync complete. ${syncedCount} new activities.`
-    );
-
+    console.log(result);
     process.exit(0);
-  }
-  
-  const commits = gitService.getRecentCommits(
-    projectPath,
-    5
-  );
-  
-  let syncedCount = 0;
+  } catch (error) {
+    console.error("Sync failed.");
 
-  for (const commit of commits) {
-    if (!commit.hash) {
-      continue;
-    }
-    const existingActivity =
-      activityService.getActivityByExternalId(
-        project.id,
-        "GIT",
-        commit.hash
-      );
-
-    if (existingActivity) {
-      continue;
-    }
-
-    activityService.createActivity(
-      project.id,
-      "COMMIT",
-      "GIT",
-      commit.message,
-      {
-        hash: commit.hash,
-        files: commit.files
-      },
-      commit.hash
+    console.error(
+      error instanceof Error
+        ? error.message
+        : error
     );
 
-    syncedCount++;
+    process.exit(1);
   }
-
-  console.log(
-    `Synced ${syncedCount} new Git activities.`
-  );
-
-  process.exit(0);
 }
 
 //help
