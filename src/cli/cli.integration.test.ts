@@ -1049,3 +1049,178 @@ test("CLI query ranks title matches above content matches", () => {
     );
   });
 });
+
+test("CLI filesystem sync establishes an initial baseline", () => {
+  withTempProject(({ tempDir, runCLI }) => {
+    // Create a file in the temporary project
+    fs.writeFileSync(
+      path.join(tempDir, "notes.txt"),
+      "ContextVault filesystem sync test"
+    );
+
+    // Initialize ContextVault project
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // Run the first sync
+    const syncResult = runCLI(["sync"]);
+
+    assert.equal(syncResult.status, 0);
+
+    assert.match(
+      syncResult.stdout,
+      /Initial scan complete\./
+    );
+
+    // At least the created notes.txt should be indexed
+    const match = syncResult.stdout.match(
+      /Initial scan complete\. (\d+) files indexed\./
+    );
+
+    assert.ok(match, "Initial scan count should be printed");
+
+    const indexedCount = Number(match[1]);
+
+    assert.ok(
+      indexedCount >= 1,
+      "At least one file should be indexed"
+    );
+  });
+});
+
+test("CLI filesystem sync records a modified file", () => {
+  withTempProject(({ tempDir, runCLI }) => {
+    const filePath = path.join(tempDir, "sync-notes.txt");
+
+    // Create file before initial scan
+    fs.writeFileSync(filePath, "Initial content");
+
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // First sync establishes baseline
+    const firstSync = runCLI(["sync"]);
+    assertCLISuccess(firstSync, "Initial sync");
+
+    assert.match(firstSync.stdout, /Initial scan complete\./);
+
+    // Modify file after baseline
+    fs.writeFileSync(
+      filePath,
+      "Updated content with additional filesystem sync data"
+    );
+
+    // Second sync should detect modification
+    const secondSync = runCLI(["sync"]);
+    assertCLISuccess(secondSync, "Second sync");
+
+    assert.match(
+      secondSync.stdout,
+      /Filesystem sync complete\./
+    );
+
+    assert.match(
+      secondSync.stdout,
+      /Filesystem sync complete\.\s+\d+ new activities\./
+    );
+    // Verify activity appears in CLI output
+    const activityResult = runCLI(["activity", "list"]);
+
+    assertCLISuccess(activityResult, "Activity list");
+
+    assert.match(activityResult.stdout, /FILE_CHANGE/);
+    assert.match(activityResult.stdout, /sync-notes\.txt/);
+    assert.match(activityResult.stdout, /MODIFIED/);
+  });
+});
+
+test("CLI filesystem sync records a deleted file", () => {
+  withTempProject(({ tempDir, runCLI }) => {
+    const filePath = path.join(
+      tempDir,
+      "deletion-test-file.txt"
+    );
+
+    fs.writeFileSync(filePath, "File to be deleted");
+
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // Establish initial baseline
+    const firstSync = runCLI(["sync"]);
+    assertCLISuccess(firstSync, "Initial sync");
+
+    assert.match(firstSync.stdout, /Initial scan complete\./);
+
+    // Delete file after baseline
+    fs.unlinkSync(filePath);
+
+    // Sync should detect deletion
+    const secondSync = runCLI(["sync"]);
+    assertCLISuccess(secondSync, "Second sync");
+
+    assert.match(
+      secondSync.stdout,
+      /Filesystem sync complete\./
+    );
+
+    // Verify the deleted file was recorded as an activity
+    const activityResult = runCLI(["activity", "list"]);
+    assertCLISuccess(activityResult, "Activity list");
+
+    assert.match(
+      activityResult.stdout,
+      /FILE_CHANGE/
+    );
+
+    assert.match(
+      activityResult.stdout,
+      /deletion-test-file\.txt/
+    );
+
+    assert.match(
+      activityResult.stdout,
+      /DELETED/
+    );
+  });
+});
+
+test("CLI filesystem sync does not duplicate activities for unchanged files", () => {
+  withTempProject(({ tempDir, runCLI }) => {
+    const filePath = path.join(
+      tempDir,
+      "duplicate-sync-test.txt"
+    );
+
+    fs.writeFileSync(filePath, "Initial content");
+
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // Establish baseline
+    const firstSync = runCLI(["sync"]);
+    assertCLISuccess(firstSync, "Initial sync");
+
+    // Modify file and sync the change
+    fs.writeFileSync(
+      filePath,
+      "Modified content for duplicate activity test"
+    );
+
+    const secondSync = runCLI(["sync"]);
+    assertCLISuccess(secondSync, "Second sync");
+
+    assert.match(
+      secondSync.stdout,
+      /Filesystem sync complete\./
+    );
+
+    // Run sync again without changing any files
+    const thirdSync = runCLI(["sync"]);
+    assertCLISuccess(thirdSync, "Third sync");
+    assert.match(
+      thirdSync.stdout,
+      /Filesystem sync complete\. 0 new activities\./
+    );
+  });
+});

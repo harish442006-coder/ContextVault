@@ -35,6 +35,20 @@ export class ProjectScannerService {
     "contextvault.db-shm",
     ]);
 
+  private ignoredPaths: Set<string>;
+
+  constructor(databasePath?: string) {
+    this.ignoredPaths = new Set(
+      databasePath
+        ? [
+            path.resolve(databasePath),
+            path.resolve(`${databasePath}-wal`),
+            path.resolve(`${databasePath}-shm`),
+          ]
+        : []
+    );
+  }
+
   scanProject(projectPath: string): FileSnapshot[] {
     const snapshots: FileSnapshot[] = [];
 
@@ -118,6 +132,9 @@ export class ProjectScannerService {
       }
 
       if (!entry.isFile()) {
+        continue;
+      }
+      if (this.ignoredPaths.has(path.resolve(fullPath))) {
         continue;
       }
       if (this.ignoredFiles.has(entry.name)) {

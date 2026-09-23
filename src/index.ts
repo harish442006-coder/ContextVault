@@ -94,7 +94,9 @@ const contextVault = new ContextVaultService(
 
 const gitService = new GitService();
 
-const projectScanner = new ProjectScannerService();
+const projectScanner = new ProjectScannerService(
+    process.env.CONTEXTVAULT_DB_PATH
+);
 
 const fileSnapshotRepository =
   new FileSnapshotRepository(db);
