@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx --test src/core/retrieval/activity-retrieval.service.test.ts src/core/context/context-builder.service.test.ts src/core/context/context-vault.service.test.ts src/core/retrieval/retrieval.service.test.ts src/cli/cli.integration.test.ts"
+    "test": "tsx --test src/core/scanner/project-scanner.service.test.ts src/core/retrieval/activity-retrieval.service.test.ts src/core/context/context-builder.service.test.ts src/core/context/context-vault.service.test.ts src/core/retrieval/retrieval.service.test.ts src/cli/cli.integration.test.ts"
   },
   "keywords": [],
   "author": "",

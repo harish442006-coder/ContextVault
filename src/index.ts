@@ -440,8 +440,24 @@ if (command === "sync") {
   }
 
   if (!gitService.isGitRepository(projectPath)) {
-    const currentSnapshots =
-      projectScanner.scanProject(projectPath);
+    let currentSnapshots;
+
+    try {
+      currentSnapshots =
+        projectScanner.scanProject(projectPath);
+    } catch (error) {
+      console.error(
+        "Filesystem scan failed. Sync aborted."
+      );
+
+      console.error(
+        error instanceof Error
+          ? error.message
+          : error
+      );
+
+      process.exit(1);
+    }
 
     const previousSnapshots =
       fileSnapshotRepository.getSnapshotsByProjectId(
