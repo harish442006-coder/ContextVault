@@ -20,11 +20,15 @@ export class RetrievalService {
       return [];
     }
 
+    const documentFrequencies =
+      this.calculateDocumentFrequencies(memories);
+
     const scoredMemories = memories.map((memory) => {
       const score = this.calculateScore(
         memory,
         keywords,
-        memories
+        memories,
+        documentFrequencies
       );
 
       return {
@@ -94,25 +98,35 @@ export class RetrievalService {
       .filter((word) => word.length > 0);
   }
 
+  private calculateDocumentFrequencies(
+    memories: Memory[]
+  ): Map<string, number> {
+    const documentFrequencies = new Map<string, number>();
+
+    for (const memory of memories) {
+      const uniqueTerms = new Set([
+        ...this.tokenize(memory.title),
+        ...this.tokenize(memory.content),
+        ...memory.tags.map((tag) => tag.toLowerCase()),
+      ]);
+
+      for (const term of uniqueTerms) {
+        documentFrequencies.set(
+          term,
+          (documentFrequencies.get(term) ?? 0) + 1
+        );
+      }
+    }
+
+    return documentFrequencies;
+  }
   private calculateTermWeight(
     term: string,
-    memories: Memory[]
+    totalDocuments: number,
+    documentFrequencies: Map<string, number>
   ): number {
-    const documentFrequency = memories.filter((memory) => {
-      const titleTokens = this.tokenize(memory.title);
-      const contentTokens = this.tokenize(memory.content);
-      const tags = memory.tags.map((tag) =>
-        tag.toLowerCase()
-      );
-
-      return (
-        titleTokens.includes(term) ||
-        contentTokens.includes(term) ||
-        tags.includes(term)
-      );
-    }).length;
-
-    const totalDocuments = memories.length;
+    const documentFrequency =
+      documentFrequencies.get(term) ?? 0;
 
     return (
       Math.log(
@@ -133,7 +147,8 @@ export class RetrievalService {
   private calculateScore(
     memory: Memory,
     keywords: string[],
-    memories: Memory[]
+    memories: Memory[],
+    documentFrequencies: Map<string, number>
   ): number {
     let score = 0;
     let matchedKeywords = 0;
@@ -158,7 +173,8 @@ export class RetrievalService {
 
       const termWeight = this.calculateTermWeight(
         keyword,
-        memories
+        memories.length,
+        documentFrequencies
       );
 
       const specificTerm = this.isSpecificTerm(keyword);
