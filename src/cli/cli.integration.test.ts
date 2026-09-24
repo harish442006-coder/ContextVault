@@ -1224,3 +1224,45 @@ test("CLI filesystem sync does not duplicate activities for unchanged files", ()
     );
   });
 });
+
+test("CLI sync reports failure when snapshot saving fails", () => {
+  withTempProject(({ tempDir, runCLI, openDB }) => {
+    // 1. Initialize project
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // 2. Create a file so sync has a snapshot to save
+    fs.writeFileSync(
+      path.join(tempDir, "trigger-test.txt"),
+      "Test sync failure"
+    );
+
+    // 3. Force snapshot insertion to fail
+    const db = openDB();
+
+    try {
+      db.exec(`
+        CREATE TRIGGER force_snapshot_failure
+        BEFORE INSERT ON file_snapshots
+        BEGIN
+          SELECT RAISE(ABORT, 'forced sync failure');
+        END;
+      `);
+    } finally {
+      db.close();
+    }
+
+    // 4. Run sync
+    const syncResult = runCLI(["sync"]);
+
+    // 5. Verify CLI error handling
+    assert.equal(
+      syncResult.status,
+      1,
+      `Expected sync to fail:\n${syncResult.stdout}\n${syncResult.stderr}`
+    );
+
+    assert.match(syncResult.stderr, /Sync failed\./);
+    assert.match(syncResult.stderr, /forced sync failure/i);
+  });
+});
