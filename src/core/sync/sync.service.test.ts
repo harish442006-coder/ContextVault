@@ -290,3 +290,76 @@ test("Git sync skips commits without a hash", () => {
   assert.equal(result, "Synced 0 new Git activities.");
   assert.equal(createActivityCalls, 0);
 });
+
+test("filesystem sync propagates scanner errors without saving snapshots", () => {
+  let saveSnapshotsCalls = 0;
+
+  const gitService = {
+    isGitRepository: () => false,
+  };
+
+  const scanner = {
+    scanProject: () => {
+      throw new Error("Scanner failed");
+    },
+  };
+
+  const snapshotRepository = {
+    getSnapshotsByProjectId: () => [],
+    saveSnapshots: () => {
+      saveSnapshotsCalls++;
+    },
+  };
+
+  const activityService = {};
+
+  const syncService = new SyncService(
+    gitService as unknown as GitService,
+    scanner as unknown as ProjectScannerService,
+    snapshotRepository as unknown as FileSnapshotRepository,
+    activityService as unknown as ActivityService
+  );
+
+  assert.throws(
+    () => syncService.syncProject("project-1", "/test/project"),
+    {
+      message: "Scanner failed",
+    }
+  );
+
+  assert.equal(saveSnapshotsCalls, 0);
+});
+
+test("Git sync propagates errors when retrieving commits fails", () => {
+  let createActivityCalls = 0;
+
+  const gitService = {
+    isGitRepository: () => true,
+    getRecentCommits: () => {
+      throw new Error("Git log failed");
+    },
+  };
+
+  const activityService = {
+    getActivityByExternalId: () => null,
+    createActivity: () => {
+      createActivityCalls++;
+    },
+  };
+
+  const syncService = new SyncService(
+    gitService as unknown as GitService,
+    {} as ProjectScannerService,
+    {} as FileSnapshotRepository,
+    activityService as unknown as ActivityService
+  );
+
+  assert.throws(
+    () => syncService.syncProject("project-1", "/test/project"),
+    {
+      message: "Git log failed",
+    }
+  );
+
+  assert.equal(createActivityCalls, 0);
+});
