@@ -90,12 +90,24 @@ test("places superseded memories in historical context", () => {
     []
   );
 
-  assert.ok(context.includes("HISTORICAL CONTEXT"));
-  assert.ok(context.includes("Title: Old Database Decision"));
-  assert.ok(context.includes("Status: SUPERSEDED"));
-  assert.ok(context.includes("The project previously used MongoDB."));
-});
+  const historicalIndex =
+    context.indexOf("HISTORICAL CONTEXT");
 
+  const activitiesIndex =
+    context.indexOf("RELEVANT ACTIVITIES");
+
+  const memoryIndex =
+    context.indexOf("Title: Old Database Decision");
+
+  assert.ok(historicalIndex !== -1);
+  assert.ok(memoryIndex > historicalIndex);
+  assert.ok(memoryIndex < activitiesIndex);
+
+  assert.ok(context.includes("Status: SUPERSEDED"));
+  assert.ok(
+    context.includes("The project previously used MongoDB.")
+  );
+});
 test("limits active memories to five", () => {
   const builder = new ContextBuilderService();
 

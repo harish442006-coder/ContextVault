@@ -37,6 +37,7 @@ function showHelp() {
     contextvault memory list
     contextvault memory update <MEMORY_ID>
     contextvault memory archive <MEMORY_ID>
+    contextvault memory status <MEMORY_ID> <STATUS>
 
     contextvault activity list
     contextvault activity list --limit <N>
@@ -49,6 +50,10 @@ function showHelp() {
   Activity Types:
     COMMIT
     FILE_CHANGE
+  
+  Memory Status:
+    ACTIVE
+    SUPERSEDED
 
   Examples:
     contextvault activity list --limit 5
@@ -339,6 +344,63 @@ if (command === "memory" && subcommand === "archive") {
   );
 
   console.log(`Memory archived: ${memory.title}`);
+
+  process.exit(0);
+}
+
+// memory status
+if (command === "memory" && subcommand === "status") {
+  const memoryId = process.argv[4];
+  const status = process.argv[5];
+
+  if (!memoryId || !status) {
+    console.log(
+      "Usage: contextvault memory status <MEMORY_ID> <STATUS>"
+    );
+    process.exit(1);
+  }
+
+  if (
+    status !== "ACTIVE" &&
+    status !== "SUPERSEDED"
+  ) {
+    console.log(
+      "Invalid status. Use: ACTIVE or SUPERSEDED"
+    );
+    process.exit(1);
+  }
+
+  const projectPath = process.cwd();
+
+  const project = projectService.getProjectByRootPath(
+    projectPath
+  );
+
+  if (!project) {
+    console.log("No project found. Run: contextvault init");
+    process.exit(1);
+  }
+
+  const memory = memoryService.getMemoryById(memoryId);
+
+  if (!memory) {
+    console.log("Memory not found.");
+    process.exit(1);
+  }
+
+  if (memory.projectId !== project.id) {
+    console.log("Memory does not belong to this project.");
+    process.exit(1);
+  }
+
+  memoryService.updateMemoryStatus(
+    memoryId,
+    status
+  );
+
+  console.log(
+    `Memory status updated: ${memory.title} → ${status}`
+  );
 
   process.exit(0);
 }

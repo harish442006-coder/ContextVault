@@ -84,10 +84,7 @@ export class ContextBuilderService {
       `<CONTEXTVAULT_CONTEXT>\n\n` +
       `PROJECT\n` +
       `Name: ${projectName}\n` +
-      `Path: ${projectPath}\n\n` +
-      `CURRENT CONTEXT\n\n` +
-      `HISTORICAL CONTEXT\n\n` +
-      `RELEVANT ACTIVITIES\n\n`;
+      `Path: ${projectPath}\n\n`;
 
     const activeMemories = memories
       .filter((item) => item.memory.status === "ACTIVE")
@@ -114,6 +111,7 @@ export class ContextBuilderService {
       return true;
     };
 
+    context += `CURRENT CONTEXT\n\n`;
     for (const item of activeMemories) {
       const memory = item.memory;
 
@@ -127,7 +125,8 @@ export class ContextBuilderService {
         break;
       }
     }
-
+    
+    context += `HISTORICAL CONTEXT\n\n`;
     for (const item of supersededMemories) {
       const memory = item.memory;
 
@@ -142,7 +141,7 @@ export class ContextBuilderService {
         break;
       }
     }
-
+      context += `RELEVANT ACTIVITIES\n\n`;
       for (const item of relevantActivities) {
         const activity = item.activity;
 
