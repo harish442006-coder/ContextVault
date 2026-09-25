@@ -138,7 +138,7 @@ test("ranks title match higher than content match", () => {
     (results[0]?.score ?? 0) >
       (results[1]?.score ?? 0)
   );
-});0
+});
 
 test("gives active memories a score bonus", () => {
   const activeMemory = createMemory({
@@ -245,4 +245,22 @@ test("rejects memory when it does not match the query's specific term", () => {
   );
 
   assert.deepEqual(results, []);
+});
+
+test("returns memory when it matches one of multiple specific query terms", () => {
+  const memory = createMemory({
+    title: "Deployment Guide",
+    content: "deployment123 setup instructions",
+    tags: [],
+  });
+
+  const service = createRetrievalService([memory]);
+
+  const results = service.search(
+    "project-1",
+    "deployment123 authentication456"
+  );
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.memory.id, "memory-1");
 });

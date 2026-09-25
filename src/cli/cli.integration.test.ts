@@ -1266,3 +1266,46 @@ test("CLI sync reports failure when snapshot saving fails", () => {
     assert.match(syncResult.stderr, /forced sync failure/i);
   });
 });
+
+test("CLI completes init, memory add, sync, and query workflow", () => {
+  withTempProject(({ tempDir, runCLI }) => {
+    // 1. Create a project file
+    fs.writeFileSync(
+      path.join(tempDir, "README.md"),
+      "ContextVault end-to-end workflow test"
+    );
+
+    // 2. Initialize ContextVault
+    const initResult = runCLI(["init"]);
+    assertCLISuccess(initResult, "Init");
+
+    // 3. Add a memory
+    const addResult = runCLI([
+      "memory",
+      "add",
+      "PROJECT",
+      "E2E Workflow Memory",
+      "ContextVault stores and retrieves project knowledge",
+      "e2e,workflow",
+    ]);
+
+    assertCLISuccess(addResult, "Memory add");
+
+    // 4. Sync project
+    const syncResult = runCLI(["sync"]);
+    assertCLISuccess(syncResult, "Sync");
+
+    // 5. Query the saved memory
+    const queryResult = runCLI([
+      "query",
+      "project knowledge",
+    ]);
+
+    assertCLISuccess(queryResult, "Query");
+
+    assert.ok(
+      queryResult.stdout.includes("E2E Workflow Memory"),
+      `Expected memory in query output:\n${queryResult.stdout}`
+    );
+  });
+});
