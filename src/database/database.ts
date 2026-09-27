@@ -61,6 +61,21 @@ db.exec(`
     FOREIGN KEY (project_id) REFERENCES projects(id),
     UNIQUE(project_id, path)
   );
+    CREATE TABLE IF NOT EXISTS memory_proposals (
+    id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL,
+    type TEXT,
+    title TEXT,
+    content TEXT,
+    tags TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+
+    FOREIGN KEY (memory_id)
+      REFERENCES memories(id)
+      ON DELETE CASCADE
+  );
 `);
 
 const activityColumns = db

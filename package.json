@@ -9,14 +9,19 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx --test src/core/sync/sync.service.test.ts src/core/scanner/project-scanner.service.test.ts src/core/retrieval/activity-retrieval.service.test.ts src/core/context/context-builder.service.test.ts src/core/context/context-vault.service.test.ts src/core/retrieval/retrieval.service.test.ts src/cli/cli.integration.test.ts "
+    "test": "tsx --test src/core/trust/trust-policy.service.test.ts src/mcp/mcp-server.test.ts src/core/context/context-vault.contract.test.ts src/core/context/context-contract.test.ts src/core/sync/sync.service.test.ts src/core/scanner/project-scanner.service.test.ts src/core/retrieval/activity-retrieval.service.test.ts src/core/context/context-builder.service.test.ts src/core/context/context-vault.service.test.ts src/core/retrieval/retrieval.service.test.ts src/cli/cli.integration.test.ts "
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
     "@types/node": "^26.6.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.1.0",
+    "zod": "^4.6.5"
   }
 }

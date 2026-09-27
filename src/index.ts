@@ -1,27 +1,7 @@
 #!/usr/bin/env node
-import db from "./database/database.js";
+import { createContextVaultApp } from "./app/contextvault-app.js";
+
 import type { MemoryType } from "./core/memory/memory.model.js";
-
-import { ProjectScannerService } from "./core/scanner/project-scanner.service.js";
-import { FileSnapshotRepository } from "./core/scanner/file-snapshot.repository.js";
-
-import { ProjectRepository } from "./core/project/project.repository.js";
-import { ProjectService } from "./core/project/project.service.js";
-
-import { MemoryRepository } from "./core/memory/memory.repository.js";
-import { MemoryService } from "./core/memory/memory.service.js";
-
-import { RetrievalService } from "./core/retrieval/retrieval.service.js";
-import { ContextBuilderService } from "./core/context/context-builder.service.js";
-import { ContextVaultService } from "./core/context/context-vault.service.js";
-
-import { ActivityRepository } from "./core/activity/activity.repository.js";
-import { ActivityService } from "./core/activity/activity.service.js";
-import { GitService } from "./core/git/git.service.js";
-import { ActivityRetrievalService } from "./core/retrieval/activity-retrieval.service.js";
-
-import { SyncService } from "./core/sync/sync.service.js";
-
 import { seedDemoData } from "./seed.js";
 
 function showHelp() {
@@ -74,46 +54,14 @@ function isValidMemoryType(
     ].includes(value as MemoryType);
   }
 
-// Repositories
-const projectRepository = new ProjectRepository(db);
-const memoryRepository = new MemoryRepository(db);
-const activityRepository = new ActivityRepository(db);
-
-// Services
-const projectService = new ProjectService(projectRepository);
-const memoryService = new MemoryService(memoryRepository);
-
-const retrievalService = new RetrievalService(memoryRepository);
-const contextBuilder = new ContextBuilderService();
-
-const activityService = new ActivityService(
-  activityRepository
-);
-
-const activityRetrievalService =
-  new ActivityRetrievalService(activityService);
-
-const contextVault = new ContextVaultService(
-  retrievalService,
-  contextBuilder,
-  activityRetrievalService
-);
-
-const gitService = new GitService();
-
-const projectScanner = new ProjectScannerService(
-    process.env.CONTEXTVAULT_DB_PATH
-);
-
-const fileSnapshotRepository =
-  new FileSnapshotRepository(db);
-
-const syncService = new SyncService(
-  gitService,
-  projectScanner,
-  fileSnapshotRepository,
-  activityService
-);
+//services
+const {
+  projectService,
+  memoryService,
+  activityService,
+  contextVault,
+  syncService,
+} = createContextVaultApp();
 
 const command = process.argv[2];
 const query = process.argv[3];
